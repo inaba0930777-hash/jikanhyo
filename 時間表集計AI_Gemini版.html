@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手書き時間表 集計AI</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3250;
+    --accent: #4f8ef7;
+    --accent2: #7c6af7;
+    --green: #3ecf8e;
+    --red: #f25757;
+    --yellow: #f5a623;
+    --text: #e8ecf4;
+    --muted: #6b7494;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 12px; }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+
+  header h1 { font-size: 16px; font-weight: 700; }
+  header h1 span { font-size: 11px; color: var(--muted); font-weight: 300; margin-left: 4px; }
+
+  /* API Key bar */
+  .apikey-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+
+  .apikey-bar label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .apikey-bar input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    width: 200px;
+  }
+
+  .apikey-bar input::placeholder { color: var(--muted); }
+
+  .btn-save-key {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-save-key:hover { border-color: var(--accent); color: var(--accent); }
+  .key-status { font-size: 11px; }
+  .key-ok { color: var(--green); }
+  .key-ng { color: var(--red); }
+
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* LEFT PANEL */
+  .left-panel {
+    width: 340px;
+    min-width: 280px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .section {
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    background: var(--surface2);
+  }
+
+  .upload-zone:hover, .upload-zone.drag {
+    border-color: var(--accent);
+    background: rgba(79,142,247,0.06);
+  }
+
+  .upload-zone input {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+  }
+
+  .upload-icon { font-size: 28px; margin-bottom: 6px; }
+  .upload-zone p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .upload-zone strong { color: var(--accent); }
+
+  #previewArea img {
+    width: 100%; border-radius: 8px; margin-top: 10px;
+    border: 1px solid var(--border); max-height: 180px;
+    object-fit: contain; background: #000; display: block;
+  }
+
+  .btn-analyze {
+    width: 100%; padding: 13px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; border-radius: 10px;
+    color: #fff; font-size: 14px; font-weight: 700;
+    font-family: 'Noto Sans JP', sans-serif;
+    cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    letter-spacing: 0.05em;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-analyze:hover { opacity: 0.9; }
+  .btn-analyze:active { transform: scale(0.98); }
+  .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .rules-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .rules-list li {
+    font-size: 12px; color: var(--muted);
+    display: flex; align-items: flex-start; gap: 7px; line-height: 1.5;
+  }
+  .rules-list li::before { content: '›'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--surface2); padding: 1px 5px;
+    border-radius: 4px; font-size: 11px; color: var(--green);
+  }
+
+  /* RIGHT PANEL */
+  .right-panel { flex: 1; overflow-y: auto; padding: 22px; background: var(--bg); }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%; gap: 12px; color: var(--muted);
+  }
+  .empty-state .big-icon { font-size: 52px; }
+  .empty-state h2 { font-size: 15px; color: var(--text); opacity: 0.5; }
+  .empty-state p { font-size: 12px; text-align: center; line-height: 1.7; max-width: 280px; }
+
+  .result-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px; padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-header h2 { font-size: 15px; font-weight: 700; }
+
+  .badge {
+    font-size: 11px; padding: 3px 9px;
+    border-radius: 20px; font-weight: 600;
+  }
+  .badge-ok { background: rgba(62,207,142,0.15); color: var(--green); }
+  .badge-warn { background: rgba(245,166,35,0.15); color: var(--yellow); }
+  .badge-error { background: rgba(242,87,87,0.15); color: var(--red); }
+
+  .staff-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 14px; overflow: hidden;
+  }
+
+  .staff-header {
+    padding: 13px 16px; background: var(--surface2);
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+  }
+
+  .staff-name {
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; gap: 9px;
+  }
+
+  .staff-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+
+  .staff-summary { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .staff-summary strong {
+    color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  }
+
+  .staff-body { padding: 0 16px 12px; }
+  .staff-body.collapsed { display: none; }
+  .toggle-arrow { transition: transform 0.2s; font-size: 10px; color: var(--muted); }
+  .staff-header.open .toggle-arrow { transform: rotate(180deg); }
+
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 8px; margin-top: 14px; padding: 12px;
+    background: var(--surface2); border-radius: 8px;
+  }
+  .summary-item { text-align: center; }
+  .summary-item .val {
+    font-size: 17px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; color: var(--accent); display: block;
+  }
+  .summary-item .lbl { font-size: 10px; color: var(--muted); margin-top: 2px; display: block; }
+
+  .day-rows { margin-top: 10px; }
+  .day-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px;
+  }
+  .day-row:last-child { border-bottom: none; }
+  .day-num { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); width: 40px; flex-shrink: 0; }
+  .day-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; flex: 1; color: var(--text); }
+  .day-status { font-size: 11px; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .status-ok { color: var(--green); }
+  .status-warn { color: var(--yellow); }
+  .status-rest { color: var(--muted); }
+  .status-absent { color: var(--red); }
+  .status-unread { color: var(--yellow); }
+
+  .note-block {
+    margin: 3px 0 3px 40px; padding: 5px 9px;
+    border-radius: 0 4px 4px 0; font-size: 11px; line-height: 1.5;
+  }
+  .note-error { background: rgba(242,87,87,0.08); border-left: 3px solid var(--red); color: var(--red); }
+  .note-warn { background: rgba(245,166,35,0.08); border-left: 3px solid var(--yellow); color: var(--yellow); }
+
+  .raw-section { margin-top: 18px; }
+  .raw-section details summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 6px 0; }
+  pre.raw-text {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; white-space: pre-wrap;
+    color: var(--muted); line-height: 1.6; margin-top: 6px;
+    max-height: 280px; overflow-y: auto;
+  }
+
+  .loading-overlay {
+    position: fixed; inset: 0; background: rgba(15,17,23,0.88);
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; z-index: 100;
+  }
+  .loading-overlay.active { display: flex; }
+  .load-spinner {
+    width: 44px; height: 44px;
+    border: 3px solid rgba(79,142,247,0.2);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .load-text { font-size: 13px; color: var(--muted); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+
+  .alert {
+    padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 14px;
+  }
+  .alert-error { background: rgba(242,87,87,0.1); border: 1px solid rgba(242,87,87,0.3); color: var(--red); }
+  .alert-info { background: rgba(79,142,247,0.1); border: 1px solid rgba(79,142,247,0.3); color: var(--accent); }
+
+  @media (max-width: 650px) {
+    .main { flex-direction: column; overflow: visible; }
+    .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+    .right-panel { padding: 14px; }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .apikey-bar input { width: 130px; }
+    header { padding: 12px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-icon">📋</div>
+    <h1>手書き時間表 集計AI <span>Gemini版</span></h1>
+  </div>
+  <div class="apikey-bar">
+    <label>🔑 APIキー</label>
+    <input type="password" id="apiKeyInput" placeholder="AIzaSy..." autocomplete="off">
+    <button class="btn-save-key" onclick="saveKey()">保存</button>
+    <span class="key-status" id="keyStatus"></span>
+  </div>
+</header>
+
+<div class="main">
+  <div class="left-panel">
+    <div class="section">
+      <div class="section-label">📷 時間表をアップロード</div>
+      <div class="upload-zone" id="dropZone">
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <div class="upload-icon">🖼️</div>
+        <p><strong>クリックまたはドラッグ＆ドロップ</strong><br>JPG / PNG / HEIC 対応<br>複数枚同時可</p>
+      </div>
+      <div id="previewArea"></div>
+    </div>
+
+    <div class="section">
+      <button class="btn-analyze" id="analyzeBtn" disabled>
+        <span class="spinner" id="btnSpinner"></span>
+        <span id="btnText">⚡ AI解析を開始</span>
+      </button>
+    </div>
+
+    <div class="section">
+      <div class="section-label">📐 適用ルール</div>
+      <ul class="rules-list">
+        <li>記入形式 <code>開始-終了(実働)</code> を解析</li>
+        <li>実働 ＝ 終了 − 開始（休憩なし）</li>
+        <li>空欄セル → 休み（公休）</li>
+        <li><code>×</code> <code>✕</code> → 欠席（0h）</li>
+        <li>()内と計算値が不一致 → ❌ ミス警告</li>
+        <li>12時間超・負値・0.5刻み違反 → ⚠️ 警告</li>
+        <li>不鮮明 → 「判読不能」表示</li>
+        <li>推測・休憩補完は一切行わない</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="right-panel" id="rightPanel">
+    <div class="empty-state" id="emptyState">
+      <div class="big-icon">🗂️</div>
+      <h2>時間表を読み込んでください</h2>
+      <p>APIキーを設定して写真をアップロードし、解析ボタンを押してください。</p>
+    </div>
+    <div id="resultArea" style="display:none"></div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="load-spinner"></div>
+  <div class="load-text">Gemini AIが時間表を解析中...</div>
+</div>
+
+<script>
+// ===================== APIキー管理 =====================
+const API_KEY_STORAGE = 'gemini_api_key';
+
+function saveKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) return;
+  localStorage.setItem(API_KEY_STORAGE, key);
+  showKeyStatus(true);
+  updateAnalyzeBtn();
+}
+
+function loadKey() {
+  const key = localStorage.getItem(API_KEY_STORAGE) || '';
+  if (key) {
+    document.getElementById('apiKeyInput').value = key;
+    showKeyStatus(true);
+  }
+  return key;
+}
+
+function getKey() {
+  return document.getElementById('apiKeyInput').value.trim() || localStorage.getItem(API_KEY_STORAGE) || '';
+}
+
+function showKeyStatus(ok) {
+  const el = document.getElementById('keyStatus');
+  el.textContent = ok ? '✓ 設定済' : '未設定';
+  el.className = 'key-status ' + (ok ? 'key-ok' : 'key-ng');
+}
+
+function updateAnalyzeBtn() {
+  const hasKey = !!getKey();
+  const hasFile = uploadedFiles.length > 0;
+  document.getElementById('analyzeBtn').disabled = !(hasKey && hasFile);
+}
+
+// ===================== ファイル管理 =====================
+let uploadedFiles = [];
+let imageBase64s = [];
+let imageMimes = [];
+
+const fileInput = document.getElementById('fileInput');
+const dropZone = document.getElementById('dropZone');
+const previewArea = document.getElementById('previewArea');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+function handleFiles(files) {
+  uploadedFiles = Array.from(files);
+  imageBase64s = [];
+  imageMimes = [];
+  previewArea.innerHTML = '';
+
+  uploadedFiles.forEach((file, i) => {
+    const mime = file.type || 'image/jpeg';
+    imageMimes[i] = mime;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      imageBase64s[i] = e.target.result.split(',')[1];
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      previewArea.appendChild(img);
+      updateAnalyzeBtn();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ===================== 解析 =====================
+document.getElementById('analyzeBtn').addEventListener('click', analyze);
+
+async function analyze() {
+  const apiKey = getKey();
+  if (!apiKey) { alert('APIキーを入力してください'); return; }
+  if (!uploadedFiles.length) return;
+
+  document.getElementById('loadingOverlay').classList.add('active');
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('btnSpinner').style.display = 'block';
+  document.getElementById('btnText').textContent = '解析中...';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultArea').style.display = 'none';
+
+  try {
+    // Gemini API: gemini-1.5-flash
+    const parts = [];
+
+    // 画像パーツ
+    imageBase64s.forEach((b64, i) => {
+      parts.push({
+        inline_data: {
+          mime_type: imageMimes[i] || 'image/jpeg',
+          data: b64
+        }
+      });
+    });
+
+    // プロンプト
+    parts.push({
+      text: `あなたは手書き時間表の集計専門AIです。以下のルールを厳守して解析してください。
+
+【絶対ルール】
+- 休憩時間は絶対に差し引かない（休憩は存在しない）
+- 空欄セルは「休み（公休）」として処理する
+- 「×」「✕」は「欠席」（実働0h）として処理する
+- 実働 ＝ 終了 − 開始 で計算する
+- 推測・一般常識による補完は禁止
+- 不鮮明な場合は「判読不能」と明記する
+- 数値は0.5単位を基本とする
+
+【入力形式】
+セル内記入: 開始-終了(実働)
+例: 5.5-10(4.5)、9-15(6)
+※()が未記入の場合もある
+
+【処理内容】
+1. 各スタッフの各日について:
+   - 勤務記載あり → 実働=終了-開始で再計算し、()内と照合
+   - 空欄 → 「休み」
+   - × → 「欠席」
+   - 判読不能 → 「判読不能」と記録
+
+2. スタッフ別に集計:
+   - 月合計実働時間
+   - 出勤日数
+   - 休み日数
+   - 欠席日数
+
+3. 異常検出:
+   - ()内と計算値の不一致 → ❌ 計算ミス（正しい値も表示）
+   - 終了 < 開始 → ⚠️ 警告
+   - 12時間超 → ⚠️ 警告
+   - 実働0未満 → ⚠️ 警告
+   - 0.5刻みでない → ⚠️ 警告
+
+【出力形式】
+以下のJSON形式のみで回答してください。前後にテキストや\`\`\`は不要です。
+
+{
+  "month": "X月",
+  "staffs": [
+    {
+      "name": "スタッフ名",
+      "days": [
+        {
+          "date": "X/Y",
+          "raw": "5.5-10(4.5)",
+          "type": "work",
+          "start": 5.5,
+          "end": 10,
+          "recorded": 4.5,
+          "calculated": 4.5,
+          "status": "ok",
+          "notes": []
+        }
+      ],
+      "summary": {
+        "totalHours": 0,
+        "workDays": 0,
+        "restDays": 0,
+        "absentDays": 0,
+        "unreadableDays": 0
+      }
+    }
+  ],
+  "globalNotes": []
+}
+
+type: "work"(勤務), "rest"(休み), "absent"(欠席), "unreadable"(判読不能)
+status: "ok", "error"(計算ミス), "warning"(異常), "rest", "absent", "unreadable"
+notesには警告・エラーの説明を入れてください。`
+    });
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error?.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // JSON パース
+    let parsed = null;
+    try {
+      const clean = rawText.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      const match = rawText.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { parsed = JSON.parse(match[0]); } catch(e2) {}
+      }
+    }
+
+    renderResults(parsed, rawText);
+
+  } catch(err) {
+    document.getElementById('resultArea').style.display = 'block';
+    document.getElementById('resultArea').innerHTML = `
+      <div class="alert alert-error">
+        <strong>❌ エラーが発生しました</strong><br>
+        <small>${escHtml(err.message)}</small><br><br>
+        <small>APIキーが正しいか確認してください。</small>
+      </div>`;
+  } finally {
+    document.getElementById('loadingOverlay').classList.remove('active');
+    document.getElementById('analyzeBtn').disabled = false;
+    document.getElementById('btnSpinner').style.display = 'none';
+    document.getElementById('btnText').textContent = '⚡ AI解析を開始';
+    updateAnalyzeBtn();
+  }
+}
+
+// ===================== 結果描画 =====================
+function renderResults(data, rawText) {
+  const resultArea = document.getElementById('resultArea');
+  resultArea.style.display = 'block';
+
+  if (!data || !data.staffs) {
+    resultArea.innerHTML = `
+      <div class="result-header"><h2>📄 解析結果（テキスト）</h2></div>
+      <pre class="raw-text">${escHtml(rawText)}</pre>`;
+    return;
+  }
+
+  let html = `<div class="result-header">
+    <h2>📊 ${escHtml(data.month || '')} 集計結果</h2>
+    <span class="badge badge-ok">${data.staffs.length}名</span>
+  </div>`;
+
+  data.staffs.forEach((staff, si) => {
+    const s = staff.summary || {};
+    const hasErrors = staff.days?.some(d => d.status === 'error');
+    const hasWarnings = staff.days?.some(d => d.status === 'warning' || d.status === 'unreadable');
+    const badgeClass = hasErrors ? 'badge-error' : hasWarnings ? 'badge-warn' : 'badge-ok';
+    const badgeText = hasErrors ? '⚠ ミスあり' : hasWarnings ? '要確認' : '✓ 正常';
+
+    html += `<div class="staff-card">
+      <div class="staff-header" onclick="toggleStaff(${si})" id="sh${si}">
+        <div class="staff-name">
+          <div class="staff-avatar">${escHtml((staff.name||'?')[0])}</div>
+          ${escHtml(staff.name || 'スタッフ')}
+          <span class="badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="staff-summary">
+            <span>合計 <strong>${s.totalHours ?? 0}h</strong></span>
+            <span>出勤 <strong>${s.workDays ?? 0}日</strong></span>
+          </div>
+          <span class="toggle-arrow">▼</span>
+        </div>
+      </div>
+      <div class="staff-body" id="sb${si}">
+        <div class="summary-grid">
+          <div class="summary-item"><span class="val">${s.totalHours ?? 0}</span><span class="lbl">合計実働(h)</span></div>
+          <div class="summary-item"><span class="val">${s.workDays ?? 0}</span><span class="lbl">出勤日数</span></div>
+          <div class="summary-item"><span class="val">${s.restDays ?? 0}</span><span class="lbl">休み日数</span></div>
+          <div class="summary-item"><span class="val">${s.absentDays ?? 0}</span><span class="lbl">欠席日数</span></div>
+        </div>
+        <div class="day-rows">`;
+
+    (staff.days || []).forEach(day => {
+      const st = day.status;
+      let statusHtml = '';
+      let noteHtml = '';
+
+      if (st === 'ok') {
+        statusHtml = `<span class="day-status status-ok">✔ ${day.calculated ?? ''}h</span>`;
+      } else if (st === 'error') {
+        statusHtml = `<span class="day-status status-warn">❌ ミス</span>`;
+        noteHtml = `<div class="note-block note-error">記載:(${day.recorded}) 正しい計算:${day.calculated}h　${(day.notes||[]).join(' ')}</div>`;
+      } else if (st === 'warning') {
+        statusHtml = `<span class="day-status status-warn">⚠ 警告</span>`;
+        noteHtml = `<div class="note-block note-warn">${(day.notes||[]).join(' ')}</div>`;
+      } else if (st === 'rest') {
+        statusHtml = `<span class="day-status status-rest">— 休み</span>`;
+      } else if (st === 'absent') {
+        statusHtml = `<span class="day-status status-absent">✕ 欠席</span>`;
+      } else if (st === 'unreadable') {
+        statusHtml = `<span class="day-status status-unread">? 判読不能</span>`;
+        noteHtml = `<div class="note-block note-warn">${(day.notes||[]).join(' ') || '文字が判読できません'}</div>`;
+      }
+
+      html += `<div class="day-row">
+        <span class="day-num">${escHtml(day.date||'')}</span>
+        <span class="day-val">${escHtml(day.raw||'')}</span>
+        ${statusHtml}
+      </div>${noteHtml}`;
+    });
+
+    html += `</div></div></div>`;
+  });
+
+  if (data.globalNotes?.length) {
+    html += `<div class="alert alert-info" style="margin-top:16px">
+      <strong>📝 全体メモ</strong><br>${data.globalNotes.map(escHtml).join('<br>')}
+    </div>`;
+  }
+
+  html += `<div class="raw-section">
+    <details>
+      <summary>🔍 AIの生の応答を表示</summary>
+      <pre class="raw-text">${escHtml(rawText)}</pre>
+    </details>
+  </div>`;
+
+  resultArea.innerHTML = html;
+}
+
+function toggleStaff(i) {
+  document.getElementById('sb'+i).classList.toggle('collapsed');
+  document.getElementById('sh'+i).classList.toggle('open');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// 初期化
+loadKey();
+updateAnalyzeBtn();
+</script>
+</body>
+</html>
